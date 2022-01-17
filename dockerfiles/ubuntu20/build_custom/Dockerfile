@@ -1,6 +1,6 @@
 # Copyright (C) 2020-2021 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
-FROM ubuntu:20.04 AS setup_openvino
+FROM nvidia/cuda:11.4.1-cudnn8-devel-ubuntu20.04 AS setup_openvino
 
 LABEL description="This is the dev image for Intel(R) Distribution of OpenVINO(TM) toolkit on Ubuntu 20.04 LTS"
 LABEL vendor="Intel Corporation"
@@ -78,7 +78,7 @@ RUN ./bootstrap.sh; \
 WORKDIR /opt/intel/repo
 CMD ["/bin/bash"]
 # -------------------------------------------------------------------------------------------------
-FROM ubuntu:20.04 AS copy_openvino
+FROM nvidia/cuda:11.4.1-cudnn8-devel-ubuntu20.04 AS copy_openvino
 
 LABEL description="This is the dev image for Intel(R) Distribution of OpenVINO(TM) toolkit on Ubuntu 20.04 LTS"
 LABEL vendor="Intel Corporation"
@@ -162,13 +162,61 @@ RUN apt-get update; \
         libgstreamer1.0-dev \
         libgstreamer-plugins-base1.0-dev \
         libgstreamer-plugins-good1.0-dev \
-        libgstreamer-plugins-bad1.0-dev; \
+        libgstreamer-plugins-bad1.0-dev \
+	libjpeg-dev \
+	libpng-dev \
+	libtiff-dev \
+	libxvidcore-dev \
+	x264 \
+	libx264-dev \
+	libfaac-dev \
+	libmp3lame-dev \
+	libtheora-dev \
+	libfaac-dev \
+	libmp3lame-dev \
+	libvorbis-dev \
+	libopencore-amrnb-dev \
+	libopencore-amrwb-dev \
+	libdc1394-22 \
+	libdc1394-22-dev \
+	libxine2-dev \
+	libv4l-dev \
+	v4l-utils \
+	python3-dev \
+	python3-pip \
+	python3-testresources \
+	libtbb-dev \
+	libatlas-base-dev \
+	gfortran \
+	libprotobuf-dev \
+	protobuf-compiler \
+	libgoogle-glog-dev \
+	libgflags-dev \
+	libgphoto2-dev \
+	libeigen3-dev \
+	libhdf5-dev doxygen; \
     rm -rf /var/lib/apt/lists/*
+#pushd /usr/include/linux
+#sudo ln -s -f ../libv4l1-videodev.h videodev.h
+#popd
 
-ARG OPENCV_BRANCH="master"
+WORKDIR /usr/include/linux
+RUN ln -s -f ../libv4l1-videodev.h videodev.h
 
-ARG BUILD_OPENCV_CONTRIB="no"
-ARG OPENCV_CONTRIB_BRANCH="master"
+# get the latest cmake
+RUN apt remove -y --purge --auto-remove cmake ; \
+	apt update && \
+	apt install -y software-properties-common lsb-release && \
+	apt clean all; \
+	wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | sudo tee /etc/apt/trusted.gpg.d/kitware.gpg >/dev/null; \
+	apt-add-repository "deb https://apt.kitware.com/ubuntu/ $(lsb_release -cs) main"; \
+	apt update; \
+	apt install -y cmake
+
+ARG OPENCV_BRANCH="4.5.3"
+
+ARG BUILD_OPENCV_CONTRIB="yes"
+ARG OPENCV_CONTRIB_BRANCH="4.5.3"
 
 WORKDIR /opt/intel/repo
 RUN git clone https://github.com/opencv/opencv.git --depth 1 -b ${OPENCV_BRANCH} && \
@@ -200,6 +248,27 @@ RUN mkdir "${INTEL_OPENVINO_DIR}/extras"; \
     echo "export LD_LIBRARY_PATH=${INTEL_OPENVINO_DIR}/extras/opencv/lib:\$LD_LIBRARY_PATH" | tee -a "${INTEL_OPENVINO_DIR}/extras/opencv/setupvars.sh"; \
     python3 -m pip uninstall -y opencv-python; \
     rm -rf /opt/intel/repo/opencv/build/install
+
+RUN apt update ; apt install -y python3-tk
+RUN pip install tk
+RUN pip install fiftyone
+
+#RUN mkdir /opt/tensorflow
+WORKDIR /opt/tensorflow/ 
+RUN git clone https://github.com/tensorflow/models.git
+
+WORKDIR /opt/tensorflow/models/research
+RUN protoc object_detection/protos/*.proto --python_out=.
+
+RUN pip install tensorflow_hub
+RUN pip install jupyterlab
+ 
+RUN mkdir -p /usr/local/nvidia/lib64
+RUN ln -s /usr/local/cuda-11.4/targets/x86_64-linux/lib/libcusolver.so.11 /usr/local/nvidia/lib64/libcusolver.so.10
+
+RUN apt update
+RUN apt install -y python3-venv
+
 
 WORKDIR ${INTEL_OPENVINO_DIR}
 CMD ["/bin/bash"]
